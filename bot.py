@@ -51,9 +51,8 @@ async def list_posts(message: types.Message):
     text = ""
     for i, p in enumerate(posts):
         preview = p.replace('\n', ' ')[:100]
-        text += f"{i+1}. {preview}...
+        text += "{}. {}...\\n\\n".format(i + 1, preview)
 
-"
     await message.answer(f"📋 Список постов:
 
 {text}")
