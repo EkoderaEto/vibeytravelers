@@ -4,6 +4,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import ParseMode, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils import executor
 import os
+import json
+from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 490364050
@@ -33,9 +36,36 @@ main_kb.add(
     KeyboardButton("🆕 Добавить пост")
 ).add(
     KeyboardButton("🗑 Удалить пост"),
-    KeyboardButton("✏️ Редактировать пост"),
+    KeyboardButton("✏️ Редактировать пост")
+).add(
+    KeyboardButton("⏰ Запланировать пост"),
     KeyboardButton("📊 Статистика")
 )
+
+SCHEDULED_POSTS_FILE = "scheduled_posts.json"
+scheduler = AsyncIOScheduler()
+
+def load_scheduled_posts():
+    try:
+        with open(SCHEDULED_POSTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_scheduled_posts(posts):
+    with open(SCHEDULED_POSTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(posts, f, ensure_ascii=False, indent=2)
+
+async def check_scheduled_posts():
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    posts = load_scheduled_posts()
+    remaining = []
+    for post in posts:
+        if post["datetime"] == now:
+            await bot.send_message(CHANNEL_ID, post["text"], parse_mode=ParseMode.MARKDOWN)
+        else:
+            remaining.append(post)
+    save_scheduled_posts(remaining)
 
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
@@ -126,6 +156,37 @@ async def edit_post_prompt(message: types.Message):
             await msg.answer("⚠️ Введите корректный номер.")
             dp.message_handlers.unregister(receive_edit_index)
 
+@dp.message_handler(lambda msg: msg.text == "⏰ Запланировать пост")
+async def schedule_post_prompt(message: types.Message):
+    await message.answer("Введите дату и время публикации (в формате ГГГГ-ММ-ДД ЧЧ:ММ):")
+
+    @dp.message_handler()
+    async def receive_datetime(msg: types.Message):
+        if msg.from_user.id != ADMIN_ID:
+            return
+        try:
+            scheduled_time = datetime.strptime(msg.text.strip(), "%Y-%m-%d %H:%M")
+            await msg.answer("Теперь введите текст поста:")
+
+            @dp.message_handler()
+            async def receive_post_text(new_msg: types.Message):
+                if new_msg.from_user.id != ADMIN_ID:
+                    return
+                post = {
+                    "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
+                    "text": new_msg.text.strip()
+                }
+                posts = load_scheduled_posts()
+                posts.append(post)
+                save_scheduled_posts(posts)
+                await new_msg.answer("✅ Пост запланирован на {}.".format(post["datetime"]))
+                dp.message_handlers.unregister(receive_post_text)
+
+            dp.message_handlers.unregister(receive_datetime)
+        except:
+            await msg.answer("⚠️ Неверный формат. Используй: 2025-04-10 12:00")
+            dp.message_handlers.unregister(receive_datetime)
+
 # ===== StubServer для Render (чтобы не падал из-за портов) =====
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -144,4 +205,6 @@ threading.Thread(target=run_stub_server, daemon=True).start()
 
 # ===== Запуск бота =====
 if __name__ == "__main__":
+    scheduler.add_job(check_scheduled_posts, "interval", minutes=1)
+    scheduler.start()
     executor.start_polling(dp)
