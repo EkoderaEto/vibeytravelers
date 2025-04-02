@@ -33,6 +33,7 @@ main_kb.add(
     KeyboardButton("🆕 Добавить пост")
 ).add(
     KeyboardButton("🗑 Удалить пост"),
+    KeyboardButton("✏️ Редактировать пост"),
     KeyboardButton("📊 Статистика")
 )
 
@@ -92,6 +93,38 @@ async def delete_post_prompt(message: types.Message):
 async def show_stats(message: types.Message):
     posts = load_posts()
     await message.answer(f"📊 Всего постов: {len(posts)}")
+
+# === ✏️ Редактирование поста ===
+@dp.message_handler(lambda msg: msg.text == "✏️ Редактировать пост")
+async def edit_post_prompt(message: types.Message):
+    await message.answer("Введите номер поста, который хотите отредактировать.")
+
+    @dp.message_handler()
+    async def receive_edit_index(msg: types.Message):
+        if msg.from_user.id != ADMIN_ID:
+            return
+        try:
+            index = int(msg.text.strip()) - 1
+            posts = load_posts()
+            if 0 <= index < len(posts):
+                await msg.answer("Введите новый текст для поста №{}:".format(index + 1))
+
+                @dp.message_handler()
+                async def receive_new_content(new_msg: types.Message):
+                    if new_msg.from_user.id != ADMIN_ID:
+                        return
+                    posts[index] = new_msg.text.strip()
+                    save_posts(posts)
+                    await new_msg.answer("✅ Пост №{} обновлён.".format(index + 1))
+                    dp.message_handlers.unregister(receive_new_content)
+
+                dp.message_handlers.unregister(receive_edit_index)
+            else:
+                await msg.answer("❌ Неверный номер поста.")
+                dp.message_handlers.unregister(receive_edit_index)
+        except:
+            await msg.answer("⚠️ Введите корректный номер.")
+            dp.message_handlers.unregister(receive_edit_index)
 
 # ===== StubServer для Render (чтобы не падал из-за портов) =====
 import threading
