@@ -64,6 +64,19 @@ async def on_startup(_):
     scheduler.add_job(send_scheduled_post, "cron", hour=12, minute=0)
     scheduler.add_job(send_scheduled_post, "cron", hour=18, minute=0)
     scheduler.start()
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
+class StubServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_stub_server():
+    server = HTTPServer(("0.0.0.0", 10000), StubServer)
+    server.serve_forever()
+
+threading.Thread(target=run_stub_server, daemon=True).start()
 if __name__ == "__main__":
     executor.start_polling(dp, on_startup=on_startup)
