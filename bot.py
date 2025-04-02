@@ -60,8 +60,6 @@ async def handle_channel_post(message: types.Message):
     lower_text = text.lower()
     if any(kw in lower_text for kw in KEYWORDS):
         formatted = f"{text.strip()}\n\n_Источник: @{source}_"
-
-_Источник: @{source}_"
         await bot.send_message(CHANNEL_ID, formatted, parse_mode=ParseMode.MARKDOWN)
 
 async def on_startup(_):
