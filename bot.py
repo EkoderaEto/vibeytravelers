@@ -1,10 +1,8 @@
-
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
-from aiogram.enums import ParseMode
+from aiogram.types import ParseMode
 from aiogram.utils import executor
-from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import os
 
@@ -38,18 +36,18 @@ POST_INDEX = 0
 async def send_scheduled_post():
     global POST_INDEX
     if POST_INDEX < len(POSTS):
-        await bot.send_message(CHANNEL_ID, POSTS[POST_INDEX], parse_mode=ParseMode.HTML)
+        await bot.send_message(CHANNEL_ID, POSTS[POST_INDEX], parse_mode=ParseMode.MARKDOWN)
         POST_INDEX += 1
 
 @dp.message_handler(commands=["post"])
 async def manual_post(message: types.Message):
     global POST_INDEX
     if POST_INDEX < len(POSTS):
-        await bot.send_message(CHANNEL_ID, POSTS[POST_INDEX], parse_mode=ParseMode.HTML)
+        await bot.send_message(CHANNEL_ID, POSTS[POST_INDEX], parse_mode=ParseMode.MARKDOWN)
         POST_INDEX += 1
         await message.answer("Пост отправлен!")
     else:
-        await message.answer("Больше нет постов.")
+        await message.answer("Постов больше нет.")
 
 @dp.channel_post_handler()
 async def handle_channel_post(message: types.Message):
