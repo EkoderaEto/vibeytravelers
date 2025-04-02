@@ -15,7 +15,7 @@ from aiogram.types import InputFile
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 490364050
-CHANNEL_ID = int(os.getenv("CHANNEL_ID", "-1001234567890"))
+CHANNEL_ID = os.getenv("CHANNEL_ID", "@vibeytravelers")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
