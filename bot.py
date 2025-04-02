@@ -1,4 +1,3 @@
-
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, types
@@ -51,11 +50,8 @@ async def list_posts(message: types.Message):
     text = ""
     for i, p in enumerate(posts):
         preview = p.replace('\n', ' ')[:100]
-        text += "{}. {}...\\n\\n".format(i + 1, preview)
-
-    await message.answer(f"📋 Список постов:
-
-{text}")
+        text += "{}. {}...\n\n".format(i + 1, preview)
+    await message.answer("📋 Список постов:\n\n{}".format(text))
 
 @dp.message_handler(lambda msg: msg.text == "🆕 Добавить пост")
 async def add_post_prompt(message: types.Message):
@@ -85,9 +81,7 @@ async def delete_post_prompt(message: types.Message):
             if 0 <= index < len(posts):
                 deleted = posts.pop(index)
                 save_posts(posts)
-                await msg.answer(f"🗑 Удалён пост:
-
-{deleted[:100]}...")
+                await msg.answer("🗑 Удалён пост:\n\n{}...".format(deleted[:100]))
             else:
                 await msg.answer("❌ Неверный номер.")
         except:
