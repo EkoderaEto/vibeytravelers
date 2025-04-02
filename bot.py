@@ -7,6 +7,9 @@ import os
 import json
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import aiohttp
+import tempfile
+from aiogram.types import InputFile
 
 API_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 490364050
@@ -60,12 +63,45 @@ async def check_scheduled_posts():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     posts = load_scheduled_posts()
     remaining = []
+
     for post in posts:
         if post["datetime"] == now:
-            await bot.send_message(CHANNEL_ID, post["text"], parse_mode=ParseMode.MARKDOWN)
+            try:
+                if post["type"] == "text":
+                    await bot.send_message(CHANNEL_ID, post["text"], parse_mode=ParseMode.MARKDOWN)
+
+                elif post["type"] == "photo":
+                    await bot.send_photo(CHANNEL_ID, post["file_id"], caption=post.get("caption", ""), parse_mode=ParseMode.MARKDOWN)
+
+                elif post["type"] == "album":
+                    media = []
+                    for m in post["media"]:
+                        item = InputMediaPhoto(media=m["media"], caption=m.get("caption", ""))
+                        media.append(item)
+                    await bot.send_media_group(CHANNEL_ID, media)
+                elif post["type"] == "photo_file":
+                    photo = InputFile(post["path"])
+                    await bot.send_photo(CHANNEL_ID, photo, caption=post.get("caption", ""), parse_mode=ParseMode.MARKDOWN)
+
+            except Exception as e:
+                print(f"Ошибка при отправке поста: {e}")
         else:
             remaining.append(post)
+
     save_scheduled_posts(remaining)
+
+# === Поддержка ссылок на изображения ===
+async def download_image_from_url(url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                        tmp_file.write(await resp.read())
+                        return tmp_file.name
+    except Exception as e:
+        print(f"Ошибка при загрузке изображения: {e}")
+        return None
 
 @dp.message_handler(commands=["start"])
 async def start(message: types.Message):
@@ -156,6 +192,8 @@ async def edit_post_prompt(message: types.Message):
             await msg.answer("⚠️ Введите корректный номер.")
             dp.message_handlers.unregister(receive_edit_index)
 
+from aiogram.types import ContentType, InputMediaPhoto
+
 @dp.message_handler(lambda msg: msg.text == "⏰ Запланировать пост")
 async def schedule_post_prompt(message: types.Message):
     await message.answer("Введите дату и время публикации (в формате ГГГГ-ММ-ДД ЧЧ:ММ):")
@@ -166,27 +204,72 @@ async def schedule_post_prompt(message: types.Message):
             return
         try:
             scheduled_time = datetime.strptime(msg.text.strip(), "%Y-%m-%d %H:%M")
-            await msg.answer("Теперь введите текст поста:")
+            await msg.answer("Теперь отправьте пост: это может быть текст, фото или альбом из фото с подписью.")
 
-            @dp.message_handler()
-            async def receive_post_text(new_msg: types.Message):
-                if new_msg.from_user.id != ADMIN_ID:
+            album = []
+
+            @dp.message_handler(content_types=ContentType.ANY)
+            async def receive_post(msg: types.Message):
+                if msg.from_user.id != ADMIN_ID:
                     return
-                post = {
-                    "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
-                    "text": new_msg.text.strip()
-                }
+
+                if msg.content_type == ContentType.TEXT:
+                    post = {
+                        "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
+                        "type": "text",
+                        "text": msg.text.strip()
+                    }
+                elif msg.text.strip().startswith("http"):
+                    # Попытка загрузить фото по ссылке
+                    img_path = await download_image_from_url(msg.text.strip())
+                    if img_path:
+                         post = {
+                            "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
+                            "type": "photo_file",
+                            "path": img_path,
+                            "caption": ""
+                        }
+                    else:
+                        await msg.answer("⚠️ Не удалось загрузить изображение по ссылке.")
+                        return
+                elif msg.content_type == ContentType.PHOTO:
+                    post = {
+                        "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
+                        "type": "photo",
+                        "file_id": msg.photo[-1].file_id,
+                        "caption": msg.caption or ""
+                    }
+
+                elif msg.media_group_id:
+                    # Собираем альбом
+                    album.append(msg)
+                    await asyncio.sleep(1.5)
+                    if not album or msg.media_group_id != album[0].media_group_id:
+                        return
+
+                    post = {
+                        "datetime": scheduled_time.strftime("%Y-%m-%d %H:%M"),
+                        "type": "album",
+                        "media": [{"type": "photo", "media": m.photo[-1].file_id, "caption": m.caption or ""} for m in album]
+                    }
+
+                else:
+                    await msg.answer("⚠️ Тип контента не поддерживается.")
+                    return
+
                 posts = load_scheduled_posts()
                 posts.append(post)
                 save_scheduled_posts(posts)
-                await new_msg.answer("✅ Пост запланирован на {}.".format(post["datetime"]))
-                dp.message_handlers.unregister(receive_post_text)
+
+                await msg.answer("✅ Пост запланирован на {}.".format(post["datetime"]))
+                dp.message_handlers.unregister(receive_post)
+                dp.message_handlers.unregister(receive_datetime)
 
             dp.message_handlers.unregister(receive_datetime)
         except:
             await msg.answer("⚠️ Неверный формат. Используй: 2025-04-10 12:00")
             dp.message_handlers.unregister(receive_datetime)
-
+    
 # ===== StubServer для Render (чтобы не падал из-за портов) =====
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
