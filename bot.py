@@ -203,8 +203,11 @@ def run_stub_server():
 
 threading.Thread(target=run_stub_server, daemon=True).start()
 
-# ===== Запуск бота =====
-if __name__ == "__main__":
+# ===== Запуск планировщика при старте =====
+async def on_startup(_):
     scheduler.add_job(check_scheduled_posts, "interval", minutes=1)
     scheduler.start()
-    executor.start_polling(dp)
+
+# ===== Запуск бота =====
+if __name__ == "__main__":
+    executor.start_polling(dp, on_startup=on_startup)
